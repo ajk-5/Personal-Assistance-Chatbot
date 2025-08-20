@@ -1,0 +1,16 @@
+{% extends "chat/base.html" %}
+{% block content %}
+  <h2>Events</h2>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Add Event</button>
+  </form>
+  <ul>
+    {% for e in events %}
+      <li>[{{ e.id }}] {{ e.starts_at|date:"Y-m-d H:i" }} — {{ e.title }} {% if e.location %}@ {{ e.location }}{% endif %}</li>
+    {% empty %}
+      <li>No upcoming events.</li>
+    {% endfor %}
+  </ul>
+{% endblock %}

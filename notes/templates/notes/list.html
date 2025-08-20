@@ -1,0 +1,20 @@
+{% extends "chat/base.html" %}
+{% block content %}
+  <h2>Notes</h2>
+  <form method="get" style="margin-bottom:1rem">
+    <input name="q" value="{{ q }}" placeholder="Search notes" />
+    <button type="submit">Search</button>
+  </form>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Add Note</button>
+  </form>
+  <ul>
+    {% for n in notes %}
+      <li>[{{ n.id }}] <strong>{{ n.title }}</strong> — {{ n.created_at|date:"Y-m-d H:i" }}</li>
+    {% empty %}
+      <li>No notes yet.</li>
+    {% endfor %}
+  </ul>
+{% endblock %}
