@@ -1,0 +1,20 @@
+{% extends "chat/base.html" %}
+{% block content %}
+  <section>
+    {% for m in messages reversed %}
+      <div class="row {% if m.sender == 'user' %}right{% endif %}">
+        <div class="msg {% if m.sender == 'user' %}me{% else %}bot{% endif %}">
+          <small>{{ m.created_at|date:"Y-m-d H:i" }} — {{ m.sender }}</small><br />
+          {{ m.text|linebreaksbr }}
+        </div>
+      </div>
+    {% empty %}
+      <p>No messages yet. Say hello 👋</p>
+    {% endfor %}
+  </section>
+  <form method="post" class="row" style="margin-top:1rem">
+    {% csrf_token %}
+    {{ form.text }}
+    <button type="submit">Send</button>
+  </form>
+{% endblock %}

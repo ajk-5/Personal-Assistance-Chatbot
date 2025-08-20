@@ -1,0 +1,26 @@
+{% extends "chat/base.html" %}
+{% block content %}
+  <h2>Tasks</h2>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Add Task</button>
+  </form>
+  <ul>
+    {% for t in tasks %}
+      <li>
+        {% if t.is_completed %}✅{% else %}⬜{% endif %}
+        [{{ t.id }}] {{ t.title }}
+        {% if t.due_at %}(due {{ t.due_at|date:"Y-m-d H:i" }}){% endif %}
+        {% if not t.is_completed %}
+          <form method="post" action="{% url 'tasks:complete' t.id %}" style="display:inline">
+            {% csrf_token %}
+            <button>Complete</button>
+          </form>
+        {% endif %}
+      </li>
+    {% empty %}
+      <li>No tasks yet.</li>
+    {% endfor %}
+  </ul>
+{% endblock %}

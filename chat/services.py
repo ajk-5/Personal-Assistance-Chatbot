@@ -1,0 +1,178 @@
+from __future__ import annotations
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+import re
+from typing import Optional
+from django.utils.timezone import get_current_timezone, make_aware, now
+
+from tasks.models import Task
+from notes.models import Note
+from reminders.models import Reminder
+from events.models import Event
+from .ml import IntentRouter
+
+# --- lightweight natural date parser (similar to your CLI) ---
+_TIME24 = r"(?P<h>\d{1,2}):(?P<m>\d{2})(?::(?P<s>\d{2}))?"
+_TIME12 = r"(?P<h>\d{1,2})(?::(?P<m>\d{2}))?\s?(?P<ampm>am|pm)"
+_DATE = r"(?P<y>\d{4})-(?P<mo>\d{2})-(?P<d>\d{2})"
+
+def _parse_time_into(base: datetime, token: str) -> datetime:
+    token = token.strip().lower()
+    m = re.match(_TIME24 + r"$", token)
+    if m:
+        hh = int(m.group("h")); mm = int(m.group("m")); ss = int(m.group("s")) if m.group("s") else 0
+        return base.replace(hour=hh, minute=mm, second=ss, microsecond=0)
+    m = re.match(_TIME12 + r"$", token)
+    if m:
+        hh = int(m.group("h")); mm = int(m.group("m")) if m.group("m") else 0
+        if hh == 12: hh = 0
+        if m.group("ampm") == "pm": hh += 12
+        return base.replace(hour=hh, minute=mm, second=0, microsecond=0)
+    return base
+
+def parse_datetime(text: str, base: Optional[datetime] = None) -> tuple[Optional[datetime], str]:
+    tz = get_current_timezone()
+    base = base or now().astimezone(tz)
+    s = text.strip().lower()
+
+    m = re.search(r"\bin\s+(?P<n>\d+)\s+(?P<u>seconds?|minutes?|hours?|days?|weeks?)\b", s)
+    if m:
+        n = int(m.group("n")); u = m.group("u")
+        delta = dict(second=timedelta(seconds=n), seconds=timedelta(seconds=n),
+                     minute=timedelta(minutes=n), minutes=timedelta(minutes=n),
+                     hour=timedelta(hours=n), hours=timedelta(hours=n),
+                     day=timedelta(days=n), days=timedelta(days=n),
+                     week=timedelta(weeks=n), weeks=timedelta(weeks=n))[u]
+        when = base + delta
+        remainder = (s[: m.start()] + s[m.end():]).strip()
+        return make_aware(when), remainder
+
+    m = re.search(r"\btomorrow(?:\s+at\s+(?P<t>" + _TIME24 + r"|" + _TIME12 + r"))?\b", s)
+    if m:
+        base2 = base + timedelta(days=1)
+        base2 = base2.replace(hour=9, minute=0, second=0, microsecond=0)
+        t = m.group("t")
+        when = _parse_time_into(base2, t) if t else base2
+        remainder = (s[: m.start()] + s[m.end():]).strip()
+        return make_aware(when), remainder
+
+    m = re.search(r"\btoday\s+at\s+(?P<t>" + _TIME24 + r"|" + _TIME12 + r")\b", s)
+    if m:
+        when = _parse_time_into(base, m.group("t"))
+        if when <= base:
+            when += timedelta(days=1)
+        remainder = (s[: m.start()] + s[m.end():]).strip()
+        return make_aware(when), remainder
+
+    m = re.search(r"\bon\s+" + _DATE + r"(?:\s+at\s+(?P<t>" + _TIME24 + r"|" + _TIME12 + r"))?\b", s)
+    if m:
+        y, mo, d = int(m.group("y")), int(m.group("mo")), int(m.group("d"))
+        base2 = base.replace(year=y, month=mo, day=d, hour=9, minute=0, second=0, microsecond=0)
+        t = m.group("t")
+        when = _parse_time_into(base2, t) if t else base2
+        remainder = (s[: m.start()] + s[m.end():]).strip()
+        return make_aware(when), remainder
+
+    m = re.search(_DATE + r"(?:\s+" + _TIME24 + r")?", s)
+    if m:
+        y, mo, d = int(m.group("y")), int(m.group("mo")), int(m.group("d"))
+        base2 = base.replace(year=y, month=mo, day=d, hour=9, minute=0, second=0, microsecond=0)
+        when = base2
+        mm = re.match(r"^\s+(" + _TIME24 + r"|" + _TIME12 + r")\b", s[m.end():])
+        if mm:
+            when = _parse_time_into(when, mm.group(1))
+        remainder = (s[: m.start()] + s[m.end():]).strip()
+        return make_aware(when), remainder
+
+    return None, s
+
+# --- main assistant orchestration ---
+@dataclass
+class AssistResult:
+    reply: str
+
+class Assistant:
+    def __init__(self) -> None:
+        self.router = IntentRouter()
+        self.router.train()  # train once at import; could add admin button to retrain
+
+    def handle(self, user_text: str) -> AssistResult:
+        label, conf = self.router.predict(user_text)
+        if not label or conf < self.router.threshold:
+            # simple rule fallback
+            s = user_text.lower()
+            if s.startswith("add task") or "task" in s:
+                return self._handle_tasks(user_text)
+            if s.startswith("remind me") or "reminder" in s:
+                return self._handle_reminders(user_text)
+            if s.startswith("note ") or s.startswith("search notes") or "note" in s:
+                return self._handle_notes(user_text)
+            if s.startswith("add event") or "event" in s:
+                return self._handle_events(user_text)
+            if "time" in s or "date" in s:
+                return AssistResult(reply=now().strftime("It is %Y-%m-%d %H:%M:%S %Z"))
+            return AssistResult(reply="I didn't catch that. Try 'help'.")
+        # dispatch by label
+        if label == "tasks":
+            return self._handle_tasks(user_text)
+        if label == "reminders":
+            return self._handle_reminders(user_text)
+        if label == "notes":
+            return self._handle_notes(user_text)
+        if label == "events":
+            return self._handle_events(user_text)
+        if label == "time":
+            return AssistResult(reply=now().strftime("It is %Y-%m-%d %H:%M:%S %Z"))
+        return AssistResult(reply="Okay.")
+
+    # --- handlers ---
+    def _handle_tasks(self, text: str) -> AssistResult:
+        when, remainder = parse_datetime(text)
+        title = remainder.replace("add task", "").strip() or remainder.strip() or "(untitled)"
+        if title.startswith("task"):
+            title = title.replace("task", "", 1).strip()
+        t = Task.objects.create(title=title, due_at=when)
+        extra = f" (due {when:%Y-%m-%d %H:%M})" if when else ""
+        return AssistResult(reply=f"Added task #{t.id}: {t.title}{extra}")
+
+    def _handle_notes(self, text: str) -> AssistResult:
+        s = text.strip()
+        if s.lower().startswith("search notes"):
+            q = s[len("search notes"):].strip()
+            qs = Note.objects.filter(title__icontains=q) | Note.objects.filter(content__icontains=q)
+            if not qs.exists():
+                return AssistResult(reply="No matches.")
+            preview = "\n".join([f"[{n.id}] {n.title}" for n in qs[:10]])
+            return AssistResult(reply=f"Matches:\n{preview}")
+        if s.lower().startswith("note "):
+            body = s[len("note "):].strip()
+            if ":" in body:
+                title, content = [p.strip() for p in body.split(":", 1)]
+            else:
+                title, content = body[:40], body
+            Note.objects.create(title=title, content=content)
+            return AssistResult(reply=f"Saved note: {title}")
+        return AssistResult(reply="Try: 'note Title: content' or 'search notes milk'")
+
+    def _handle_reminders(self, text: str) -> AssistResult:
+        when, remainder = parse_datetime(text)
+        msg = remainder.replace("remind me", "").replace("to ", "", 1).strip() or "(no message)"
+        if not when:
+            return AssistResult(reply="I couldn't find a time in that. Try 'in 10 minutes' or 'tomorrow at 09:00'.")
+        r = Reminder.objects.create(message=msg, due_at=when)
+        return AssistResult(reply=f"Reminder #{r.id} set for {when:%Y-%m-%d %H:%M:%S} — {msg}")
+
+    def _handle_events(self, text: str) -> AssistResult:
+        # Expect: add event 2025-08-25 14:00 - Title [@Location]
+        m = re.search(r"(?P<date>\d{4}-\d{2}-\d{2})\s+(?P<time>\d{1,2}:\d{2})\s*-\s*(?P<title>.+)", text)
+        if not m:
+            return AssistResult(reply="Usage: add event 2025-08-25 14:00 - Title [@Location]")
+        starts_at = make_aware(datetime.fromisoformat(f"{m.group('date')} {m.group('time')}"))
+        rest = m.group("title")
+        if "@" in rest:
+            title, location = [p.strip() for p in rest.split("@", 1)]
+        else:
+            title, location = rest.strip(), None
+        e = Event.objects.create(title=title, starts_at=starts_at, location=location)
+        loc = f" @ {location}" if location else ""
+        return AssistResult(reply=f"Event #{e.id} added: {title} at {starts_at:%Y-%m-%d %H:%M}{loc}")

@@ -1,0 +1,23 @@
+{% extends "chat/base.html" %}
+{% block content %}
+  <h2>Reminders</h2>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Add Reminder</button>
+  </form>
+  <ul>
+    {% for r in reminders %}
+      <li>
+        {% if r.delivered %}✅{% else %}⏰{% endif %}
+        [{{ r.id }}] {{ r.due_at|date:"Y-m-d H:i" }} — {{ r.message }}
+        <form method="post" action="{% url 'reminders:cancel' r.id %}" style="display:inline">
+          {% csrf_token %}
+          <button>Cancel</button>
+        </form>
+      </li>
+    {% empty %}
+      <li>No reminders yet.</li>
+    {% endfor %}
+  </ul>
+{% endblock %}

@@ -1,0 +1,6 @@
+Django>=5.0,<6.0
+python-dotenv>=1.0
+psycopg2-binary>=2.9  # optional: PostgreSQL in prod
+celery>=5.4
+redis>=5.0  # broker/result backend for Celery
+scikit-learn>=1.2  # optional: ML router
