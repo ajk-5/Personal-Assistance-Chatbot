@@ -1,6 +1,6 @@
 {% extends "chat/base.html" %}
 {% block content %}
-  <section>
+  <section id="chat-messages">
     {% for m in messages reversed %}
       <div class="row {% if m.sender == 'user' %}right{% endif %}">
         <div class="msg {% if m.sender == 'user' %}me{% else %}bot{% endif %}">
@@ -11,10 +11,24 @@
     {% empty %}
       <p>No messages yet. Say hello 👋</p>
     {% endfor %}
+    <div id="messages-end"></div>
   </section>
   <form method="post" class="row" style="margin-top:1rem">
     {% csrf_token %}
     {{ form.text }}
     <button type="submit">Send</button>
   </form>
+  <script>
+  (function(){
+    function scrollToBottom(){
+      var el = document.getElementById('messages-end');
+      if (el && typeof el.scrollIntoView === 'function') {
+        el.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      } else {
+        window.scrollTo(0, document.body.scrollHeight);
+      }
+    }
+    window.addEventListener('load', function(){ setTimeout(scrollToBottom, 50); });
+  })();
+  </script>
 {% endblock %}

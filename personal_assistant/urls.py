@@ -8,4 +8,5 @@ urlpatterns = [
     path("notes/", include("notes.urls")),
     path("reminders/", include("reminders.urls")),
     path("events/", include("events.urls")),
+    path("about/", include("profileapp.urls")),
 ]

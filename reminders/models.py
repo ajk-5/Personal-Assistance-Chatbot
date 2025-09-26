@@ -5,6 +5,7 @@ class Reminder(models.Model):
     due_at = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
     delivered = models.BooleanField(default=False)
+    notified = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["delivered", "due_at", "id"]

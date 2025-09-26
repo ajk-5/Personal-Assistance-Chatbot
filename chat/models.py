@@ -16,3 +16,23 @@ class TrainingPhrase(models.Model):
     class Meta:
         unique_together = ("label", "text")
         indexes = [models.Index(fields=["label"])]
+
+
+class SmalltalkPair(models.Model):
+    """Admin-trainable smalltalk patterns and reply options.
+
+    - pattern: literal substring or regex to match user input
+    - is_regex: treat pattern as regex if true
+    - answers: newline- or pipe-separated possible replies; one is chosen at random
+    """
+    pattern = models.CharField(max_length=200)
+    is_regex = models.BooleanField(default=False)
+    answers = models.TextField(help_text="Enter multiple replies separated by newlines or | characters.")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-id"]
+
+    def __str__(self) -> str:
+        return self.pattern

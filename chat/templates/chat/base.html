@@ -19,4 +19,57 @@
       {% block content %}{% endblock %}
     </main>
   </body>
+  <script>
+  (function(){
+    const pollMs = 2000;
+    let audioCtx = null;
+    function ensureAudio(){
+      if (!audioCtx) {
+        try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){ audioCtx = null; }
+        if (audioCtx) {
+          const resume = () => { if (audioCtx && audioCtx.resume) audioCtx.resume(); window.removeEventListener('click', resume); window.removeEventListener('keydown', resume); };
+          window.addEventListener('click', resume, { once: true });
+          window.addEventListener('keydown', resume, { once: true });
+        }
+      }
+    }
+    function beep(duration=300, frequency=880){
+      ensureAudio();
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = frequency;
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.2, audioCtx.currentTime + 0.02);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration/1000);
+      osc.onended = () => { try { osc.disconnect(); gain.disconnect(); } catch(e){} };
+    }
+    function toast(text){
+      const el = document.createElement('div');
+      el.textContent = text;
+      el.style.cssText = 'position:fixed;right:1rem;bottom:1rem;background:#222;color:#fff;padding:.6rem .8rem;border-radius:.4rem;box-shadow:0 2px 8px rgba(0,0,0,.2);z-index:9999';
+      document.body.appendChild(el);
+      setTimeout(()=>{ try{ el.remove(); }catch(e){} }, 6000);
+    }
+    async function poll(){
+      try{
+        const res = await fetch('/reminders/api/due/', { credentials: 'same-origin' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data && data.due && data.due.length){
+          for (const r of data.due){
+            // Single beep per reminder
+            beep(400, 880);
+            toast('Reminder: ' + r.message);
+          }
+        }
+      }catch(e){ /* ignore */ }
+    }
+    window.addEventListener('load', function(){ ensureAudio(); setInterval(poll, pollMs); });
+  })();
+  </script>
 </html>

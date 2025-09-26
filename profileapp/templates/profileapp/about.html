@@ -1,0 +1,39 @@
+{% extends "chat/base.html" %}
+{% block content %}
+  <h2>About</h2>
+  {% if profile %}
+    <p><strong>{{ profile.display_name }}</strong></p>
+    {% if profile.short_bio %}<p>{{ profile.short_bio }}</p>{% endif %}
+    {% if profile.full_bio %}<p>{{ profile.full_bio|linebreaksbr }}</p>{% endif %}
+    <ul>
+      {% if profile.email %}<li>Email: <a href="mailto:{{ profile.email }}">{{ profile.email }}</a></li>{% endif %}
+      {% if profile.website %}<li>Website: <a href="{{ profile.website }}" target="_blank">{{ profile.website }}</a></li>{% endif %}
+      {% if profile.location %}<li>Location: {{ profile.location }}</li>{% endif %}
+    </ul>
+  {% else %}
+    <p>No profile yet. Add one in the admin.</p>
+  {% endif %}
+
+  <h3>Projects</h3>
+  <ul>
+    {% for p in projects %}
+      <li>
+        <strong>{{ p.title }}</strong>
+        {% if p.summary %} — {{ p.summary }}{% endif %}
+        {% if p.url %} — <a href="{{ p.url }}" target="_blank">link</a>{% endif %}
+      </li>
+    {% empty %}
+      <li>No projects yet.</li>
+    {% endfor %}
+  </ul>
+
+  {% if faqs %}
+  <h3>FAQs</h3>
+  <ul>
+    {% for q in faqs %}
+      <li><strong>{{ q.question }}</strong><br />{{ q.answer|linebreaksbr }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+{% endblock %}
+

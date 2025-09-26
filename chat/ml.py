@@ -9,6 +9,7 @@ try:
 except Exception:  # pragma: no cover
     SKLEARN_OK = False
 
+from django.db.utils import OperationalError, ProgrammingError
 from .models import TrainingPhrase
 
 class IntentRouter:
@@ -34,13 +35,20 @@ class IntentRouter:
             "events": ["add event", "list events", "delete event"],
             "time": ["what time is it", "date", "timezone"],
             "smalltalk": ["hello", "thanks", "bye"],
+            "profile": ["about me", "who am i", "tell me about myself"],
+            "projects": ["my projects", "what projects am i doing", "show projects"],
+            "help": ["help", "how to use", "commands", "what can you do"],
         }
         for lbl, phrases in seed.items():
             for p in phrases:
                 X.append(p); y.append(lbl)
-        # User taught
-        for tp in TrainingPhrase.objects.all():
-            X.append(tp.text); y.append(tp.label)
+        # User-taught phrases from DB (guarded: during first migrations table may not exist)
+        try:
+            for tp in TrainingPhrase.objects.all():
+                X.append(tp.text); y.append(tp.label)
+        except (OperationalError, ProgrammingError):
+            # Database not ready (e.g., before migrations). Proceed with seeds only.
+            pass
         return X, y
 
     def train(self) -> str:

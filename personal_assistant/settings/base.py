@@ -23,6 +23,7 @@ INSTALLED_APPS = [
     "notes",
     "reminders",
     "events",
+    "profileapp",
 ]
 
 MIDDLEWARE = [
